@@ -4,8 +4,15 @@ if (typeof buildfire == "undefined")
 if (typeof buildfire.components == "undefined") buildfire.components = {};
 
 class Stars {
-  constructor(containerSelector, options) {
+  /**
+   *
+   * @param {String} containerSelector Query selector of container in which stars will be rendered
+   * @param {String} ratingId Unique id of item that is being rated - usually from database
+   * @param {Object} options Options object, empty now
+   */
+  constructor(containerSelector, ratingId, options) {
     this.containerSelector = containerSelector;
+    this.ratingId = ratingId;
     this.options = options;
   }
 
@@ -19,9 +26,9 @@ class Stars {
         `Container element ${this.containerSelector} not found in DOM`
       );
 
-    this.getStarsUI().forEach(star => {
-      console.log(star)
-      starsContainer.appendChild(star)
+    this.getStarsUI().forEach((star) => {
+      console.log(star);
+      starsContainer.appendChild(star);
     });
   }
 
@@ -39,12 +46,192 @@ class Stars {
         }
       });
       star.innerHTML = this.emptyStar;
-      stars.push(star)
+      stars.push(star);
     }
     return stars;
   }
 
+  closeAddRatingScreen() {
+    let backdrop = document.querySelector(".add-rating-screen-backdrop");
+    let addRatingScreen = document.querySelector(".add-rating-screen");
 
+    document.body.removeChild(backdrop);
+    document.body.removeChild(addRatingScreen);
+  }
+
+  openAddRatingScreen(containerSelector) {
+    buildfire.auth.getCurrentUser((err, loggedInUser) => {
+      let backdrop = document.createElement("div");
+      backdrop.className = "add-rating-screen-backdrop";
+      backdrop.addEventListener("click", () => {
+        this.closeAddRatingScreen();
+      })
+      document.body.appendChild(backdrop);
+
+      let userContainer = document.querySelector(containerSelector);
+      let review = {
+        rating: 0,
+        comment: "",
+        images: [],
+      };
+      let container = document.createElement("div");
+      container.className = "add-rating-screen";
+
+      console.log(this);
+
+      let image = document.createElement("img");
+      image.className = "user-profile-image";
+      image.src = buildfire.imageLib.resizeImage(loggedInUser.imageUrl, {
+        size: "s",
+        aspect: "1:1",
+      });
+
+      let heading4 = document.createElement("h4");
+      heading4.innerText = "Rate and review";
+
+      let heading5 = document.createElement("h5");
+      heading5.innerText = "Share your experience to help others";
+
+      let ratingStars = document.createElement("div");
+      ratingStars.className = "rating-stars";
+      for (let i = 0; i < 5; i++) {
+        let star = document.createElement("div");
+        star.id = "stars" + i;
+        star.addEventListener("click", function () {
+          review.rating = i + 1;
+          for (let j = 0; j < 5; j++) {
+            const star = document.getElementById("stars" + j);
+            star.innerText = j <= i ? fullStar : emptyStar;
+          }
+        });
+        star.innerHTML = emptyStar;
+        ratingStars.appendChild(star);
+      }
+
+      const openTextDialog = () => {
+        buildfire.input.showTextDialog(
+          {
+            placeholder: "Write a review...",
+            saveText: "Save",
+            defaultValue:
+              textArea.innerText !== "Write a review..."
+                ? textArea.innerText
+                : "",
+            attachments: {
+              images: {
+                enable: true,
+                multiple: true,
+              },
+            },
+          },
+          (e, response) => {
+            if (e || response.cancelled) return;
+            textArea.innerText = response.results[0].textValue;
+            review.comment = response.results[0].textValue;
+            review.images = [...review.images, ...response.results[0].images];
+            appendImages(review.images);
+          }
+        );
+      };
+
+      let textArea = document.createElement("div");
+      textArea.innerText = "Write a review...";
+      textArea.className = "text-area";
+      textArea.addEventListener("click", openTextDialog);
+
+      let imagesContainer = document.createElement("images");
+      imagesContainer.className = "review-images-container";
+
+      const removeImage = (index) => {
+        review.images.splice(index, 1);
+        appendImages(review.images);
+      };
+
+      const appendImages = (images) => {
+        imagesContainer.innerHTML = "";
+        images.forEach((imageUrl, index) => {
+          let imageContainer = document.createElement("div");
+          imageContainer.className = "review-image-container";
+
+          let deleteImageButton = document.createElement("div");
+          deleteImageButton.className = "review-image-delete";
+          deleteImageButton.innerHTML = "✖";
+          deleteImageButton.style.background = "red";
+          deleteImageButton.style.color = "white";
+
+          let image = document.createElement("img");
+          image.className = "review-image";
+          image.src = buildfire.imageLib.resizeImage(imageUrl, {
+            size: "s",
+            aspect: "1:1",
+          });
+          imageContainer.appendChild(image);
+          imageContainer.appendChild(deleteImageButton);
+          imageContainer.addEventListener("click", () => {
+            removeImage(index);
+          });
+
+          imagesContainer.appendChild(imageContainer);
+        });
+      };
+
+      let addPhotosButton = document.createElement("button");
+      addPhotosButton.innerText = "Add Photos";
+      addPhotosButton.className = "add-photos";
+      addPhotosButton.addEventListener("click", openTextDialog);
+
+      let submitButton = document.createElement("button");
+      submitButton.className = "add-photos";
+      submitButton.innerText = "Submit Review";
+      submitButton.addEventListener("click", () => {
+        console.log(review);
+      });
+
+      container.appendChild(image);
+      container.appendChild(heading4);
+      container.appendChild(heading5);
+      container.appendChild(ratingStars);
+      container.appendChild(textArea);
+      container.appendChild(imagesContainer);
+      container.appendChild(addPhotosButton);
+      container.appendChild(submitButton);
+
+      document.body.appendChild(container);
+    });
+  }
+
+  rate(rating, comment, images) {
+    // let rating = NEW
+  }
+
+  createRatingDrawer() {
+    let drawer = document.createElement("div");
+    drawer.classList.add("rating-drawer");
+  }
+
+  getSummary(cb) {
+    const filters = {
+      filter: {
+        "_buildfire.index.string1": this.ratingId,
+      },
+    };
+    Summaries.search(filters, (err, summaries) => {
+      if (err) return cb(err);
+      return cb(null, summaries[0]);
+    });
+  }
+
+  getUsersRating(cb) {
+    if (!this.user) return cb(new Error("Not logged in"));
+
+    const filters = {
+      filter: {
+        "_buildfire.index.string1": this.ratingId,
+      },
+    };
+
+    Ratings.search;
+  }
 }
 
 class Reviews {}
@@ -104,7 +291,6 @@ class Rating {
   }
 }
 
-
 class Summary {
   constructor(record = {}) {
     if (!record.data) record.data = {};
@@ -112,7 +298,7 @@ class Summary {
 
     this.ratingId = record.data.ratingId || null;
     this.count = record.data.count || 0;
-    this.total = record.data.total || 0
+    this.total = record.data.total || 0;
   }
 
   /**
@@ -127,12 +313,37 @@ class Summary {
       _buildfire: {
         index: {
           string1: this.ratingId,
-        }
-      }
+        },
+      },
     };
   }
-}  
+}
 
+class Summaries {
+  /**
+   * Get Database Tag
+   */
+  static get TAG() {
+    return "fivestarsummary";
+  }
+
+  /**
+   * Get List Of Summaries
+   * @param {Object} filters Filters object with search operators
+   * @param {Function} callback Callback function
+   */
+  static search(filters, callback) {
+    buildfire.appData.search(filters, Summaries.TAG, (err, records) => {
+      if (err) return callback(err);
+      return callback(
+        null,
+        records.map((record) => new Summary(record))
+      );
+    });
+  }
+
+  static get;
+}
 
 class Ratings {
   /**

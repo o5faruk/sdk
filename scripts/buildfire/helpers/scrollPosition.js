@@ -22,7 +22,7 @@ buildfire.helpers.rememberScrollPosition = function (id) {
   element.addEventListener(
     "scroll",
     debounce(() => {
-      buildfire.localStorage.setItem("scrollTop" + id, element.scrollTop);
+      buildfire.localStorage.setItem("rememberedScrollPosition" + id, element.scrollTop);
     }, 500)
   );
 };
@@ -30,7 +30,7 @@ buildfire.helpers.rememberScrollPosition = function (id) {
 buildfire.helpers.restoreScrollPosition = function (id) {
   let element = document.getElementById(id);
   if (!element) return console.warn(`Element with id "${id}" not found`);
-  buildfire.localStorage.getItem("scrollTop" + id, (err, scrollTop) => {
+  buildfire.localStorage.getItem("rememberedScrollPosition" + id, (err, scrollTop) => {
     element.scrollTop = scrollTop || 0;
   });
 };

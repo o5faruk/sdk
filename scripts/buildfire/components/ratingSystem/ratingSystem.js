@@ -26,13 +26,13 @@ class Stars {
         `Container element ${this.containerSelector} not found in DOM`
       );
 
-    this.getStarsUI().forEach((star) => {
+    this.createStarsUI().forEach((star) => {
       console.log(star);
       starsContainer.appendChild(star);
     });
   }
 
-  getStarsUI() {
+  createStarsUI() {
     let that = this;
     let stars = [];
     for (let i = 0; i < 5; i++) {
@@ -51,33 +51,217 @@ class Stars {
     return stars;
   }
 
-  closeAddRatingScreen() {
-    let backdrop = document.querySelector(".add-rating-screen-backdrop");
-    let addRatingScreen = document.querySelector(".add-rating-screen");
+  closeRatingsScreen() {
+    let ratingsScreen = document.querySelector(".ratings-screen");
 
-    document.body.removeChild(backdrop);
-    document.body.removeChild(addRatingScreen);
+    document.body.removeChild(ratingsScreen);
+    buildfire.navigation.restoreBackButtonClick();
   }
 
-  openAddRatingScreen(containerSelector) {
-    buildfire.auth.getCurrentUser((err, loggedInUser) => {
-      let backdrop = document.createElement("div");
-      backdrop.className = "add-rating-screen-backdrop";
-      backdrop.addEventListener("click", () => {
-        this.closeAddRatingScreen();
-      })
-      document.body.appendChild(backdrop);
 
-      let userContainer = document.querySelector(containerSelector);
-      let review = {
-        rating: 0,
-        comment: "",
-        images: [],
-      };
+  openRatingsScreen() {
+    let container = document.createElement("div");
+    container.className = "ratings-screen";
+
+    buildfire.spinner.show();
+
+
+    buildfire.navigation.onBackButtonClick = () => {
+      this.closeRatingsScreen();
+    }
+
+    Ratings.search({
+      filter: {
+        // "_buildfire.index.string1": this.ratingId
+      }
+    }, (err, ratings) => {
+      if (err) return callback(err);
+      ratings.forEach(rating => {
+        let ratingUI = this.createRatingUI(rating);
+        container.appendChild(ratingUI);
+      })
+
+      document.body.appendChild(container)
+      buildfire.spinner.hide();
+    })
+  }
+
+  showReviewScreen() {
+    let container = document.createElement("div");
+    container.className = "ratings-screen";
+
+    buildfire.spinner.show();
+
+
+    buildfire.navigation.onBackButtonClick = () => {
+      this.closeRatingsScreen();
+    }
+
+    Ratings.search({
+      filter: {
+        // "_buildfire.index.string1": this.ratingId
+      }
+    }, (err, ratings) => {
+      if (err) return callback(err);
+      ratings.forEach(rating => {
+        let ratingUI = this.createRatingUI(rating);
+        this.addControlsToRating(ratingUI)
+        container.appendChild(ratingUI);
+      })
+
+      document.body.appendChild(container)
+      buildfire.spinner.hide();
+    })
+  }
+
+  addControlsToRating(rating) {
+    let deleteButton = document.createElement("button");
+    deleteButton.innerText = "Delete";
+    deleteButton.className = "delete-button"
+    deleteButton.addEventListener("click", () => {
+      buildfire.notifications.confirm(
+        {
+          title: "Are you sure?",
+          message: "Are you sure you want to remove this review?",
+          confirmButton: { text: "Yes", key: "yes", type: "danger" },
+          cancelButton: { text: "No", key: "no", type: "default" }
+        },
+        function (e, data) {
+          if (e && e !== 2) {
+            console.log("remove rating")
+          }
+        }
+      );
+    })
+    rating.appendChild(deleteButton)
+  }
+
+  createRatingUI(rating) {
+    let container = document.createElement("div");
+    container.className = "ratings-screen-rating";
+
+    let header = document.createElement("div");
+    header.className = "rating-header";
+    container.appendChild(header);
+
+    let profileImage = document.createElement("img");
+    profileImage.className = "rating-user-image";
+    profileImage.src = rating.user && rating.user.imageUrl ? rating.user.imageUrl : "https://pluginserver.buildfire.com/styles/media/avatar-placeholder.png"
+    profileImage.src = buildfire.imageLib.resizeImage(profileImage.src, {
+      size: "s",
+      aspect: "1:1",
+    })
+    header.appendChild(profileImage);
+
+    let nameAndStars = document.createElement("div");
+    nameAndStars.className = "rating-name-and-stars";
+    header.appendChild(nameAndStars)
+
+    let userName = document.createElement("div");
+    userName.className = "rating-user-display-name";
+    userName.innerText = rating.user && rating.user.displayName ? rating.user.displayName : "Unknown User";
+    nameAndStars.appendChild(userName);
+
+    let stars = document.createElement("div");
+    stars.className = "rating-user-stars";
+    nameAndStars.appendChild(stars);
+
+    let starsSpan = document.createElement("span");
+    starsSpan.className = "rating-user-stars";
+    let starsText = "";
+    for (let i = 0; i < 5; i++) {
+      if (i < Number(rating.rating))
+        starsText += this.fullStar;
+      else starsText += this.emptyStar;
+    }
+    starsSpan.innerText = starsText;
+    let ratingTime = document.createElement("span");
+    ratingTime.className = "rating-time-ago"
+    ratingTime.innerHTML = this.getTimeAgo(new Date(rating.createdOn));
+
+    stars.appendChild(starsSpan);
+    stars.appendChild(ratingTime);
+
+    let ratingReview = document.createElement("div");
+    ratingReview.className = "rating-review";
+    container.appendChild(ratingReview);
+
+    let ratingReviewText = document.createElement("div");
+    ratingReviewText.className = "rating-review-text";
+    ratingReviewText.innerText = rating.comment;
+    ratingReview.appendChild(ratingReviewText);
+
+    let ratingImages = document.createElement("div");
+    ratingImages.className = "rating-review-images";
+    ratingReview.appendChild(ratingImages);
+
+    for (let i = 0; i < rating.images.length; i++) {
+      const imageUrl = rating.images[i];
+      let image = document.createElement("img");
+      image.className = "rating-review-image";
+      image.src = buildfire.imageLib.resizeImage(imageUrl, {
+        size: "m",
+        aspect: "1:1"
+      })
+      ratingImages.appendChild(image)
+    }
+
+    return container;
+  }
+
+  getTimeAgo(date) {
+    let seconds = Math.floor((new Date() - date) / 1000);
+
+    let interval = Math.floor(seconds / 31536000);
+
+    if (interval > 1) return interval + " years ago";
+    interval = Math.floor(seconds / 2592000);
+
+    if (interval > 1) return interval + " months ago";
+    interval = Math.floor(seconds / 86400);
+
+    if (interval > 1) return interval + " days ago";
+    interval = Math.floor(seconds / 3600);
+
+    if (interval > 1) return interval + " hours ago";
+    interval = Math.floor(seconds / 60);
+
+    if (interval > 1) return interval + " minutes ago";
+
+    return Math.floor(seconds) + " seconds ago";
+  }
+
+  closeAddRatingScreen() {
+    let addRatingScreen = document.querySelector(".add-rating-screen");
+
+    document.body.removeChild(addRatingScreen);
+
+    buildfire.navigation.restoreBackButtonClick();
+  }
+
+  openAddRatingScreen(containerSelector, callback) {
+    buildfire.auth.getCurrentUser((err, loggedInUser) => {
+      if (err || !loggedInUser) throw new Error("User not logged in")
+
+      buildfire.navigation.onBackButtonClick = () => {
+        this.closeAddRatingScreen();
+        buildfire.navigation.restoreBackButtonClick();
+      }
+
+      // let userContainer = document.querySelector(containerSelector);
+      let rating = new Rating({
+        data: {
+          createdBy: loggedInUser._id,
+          user: {
+            _id: loggedInUser._id,
+            displayName: loggedInUser.displayName,
+            imageUrl: loggedInUser.imageUrl
+          },
+          ratingId: this.ratingId
+        }
+      });
       let container = document.createElement("div");
       container.className = "add-rating-screen";
-
-      console.log(this);
 
       let image = document.createElement("img");
       image.className = "user-profile-image";
@@ -98,7 +282,7 @@ class Stars {
         let star = document.createElement("div");
         star.id = "stars" + i;
         star.addEventListener("click", function () {
-          review.rating = i + 1;
+          rating.rating = i + 1;
           for (let j = 0; j < 5; j++) {
             const star = document.getElementById("stars" + j);
             star.innerText = j <= i ? fullStar : emptyStar;
@@ -127,9 +311,9 @@ class Stars {
           (e, response) => {
             if (e || response.cancelled) return;
             textArea.innerText = response.results[0].textValue;
-            review.comment = response.results[0].textValue;
-            review.images = [...review.images, ...response.results[0].images];
-            appendImages(review.images);
+            rating.comment = response.results[0].textValue;
+            rating.images = [...rating.images, ...response.results[0].images];
+            appendImages(rating.images);
           }
         );
       };
@@ -143,8 +327,8 @@ class Stars {
       imagesContainer.className = "review-images-container";
 
       const removeImage = (index) => {
-        review.images.splice(index, 1);
-        appendImages(review.images);
+        rating.images.splice(index, 1);
+        appendImages(rating.images);
       };
 
       const appendImages = (images) => {
@@ -177,14 +361,17 @@ class Stars {
 
       let addPhotosButton = document.createElement("button");
       addPhotosButton.innerText = "Add Photos";
-      addPhotosButton.className = "add-photos";
+      addPhotosButton.className = "add-photos material-button";
       addPhotosButton.addEventListener("click", openTextDialog);
 
       let submitButton = document.createElement("button");
-      submitButton.className = "add-photos";
+      submitButton.className = "submit-button material-button";
       submitButton.innerText = "Submit Review";
       submitButton.addEventListener("click", () => {
-        console.log(review);
+        Ratings.add(rating, (err, addedRating) => {
+          this.closeAddRatingScreen();
+          callback(err, addedRating)
+        })
       });
 
       container.appendChild(image);
@@ -234,7 +421,7 @@ class Stars {
   }
 }
 
-class Reviews {}
+class Reviews { }
 
 class Rating {
   constructor(record = {}) {
@@ -242,7 +429,7 @@ class Rating {
     this.id = record.id || undefined;
     this.isActive =
       typeof record.data.isActive === "boolean" ? record.data.isActive : true;
-    this.createdOn = record.data.createdOn || undefined;
+    this.createdOn = record.data.createdOn || new Date();
     this.createdBy = record.data.createdBy || undefined;
     this.lastUpdatedOn = record.data.lastUpdatedOn || undefined;
     this.lastUpdatedBy = record.data.lastUpdatedBy || undefined;
@@ -250,9 +437,9 @@ class Rating {
     this.deletedBy = record.data.deletedBy || undefined;
 
     this.user = record.data.user || {
-      id: "",
+      _id: "",
       displayName: "",
-      image: "",
+      imageUrl: "",
     };
     this.ratingId = record.data.ratingId || undefined;
     this.rating = record.data.rating || undefined;
@@ -283,7 +470,7 @@ class Rating {
         index: {
           number1: this.isActive ? 1 : 0,
           date1: this.createdOn,
-          array1: [this.rating],
+          array1: [this.rating, this.user._id],
           string1: this.ratingId,
         },
       },
@@ -376,18 +563,32 @@ class Ratings {
     if (!(rating instanceof Rating))
       return callback(new Error("Only Rating instance can be used"));
 
-    rating.createdBy = authManager.currentUser._id;
-    rating.createdOn = new Date();
+    if (!rating.user || !rating.user._id) return (callback(new Error("User must be logged in")));
 
-    buildfire.appData.insert(
-      rating.toJSON(),
-      Ratings.TAG,
-      false,
-      (err, record) => {
-        if (err) return callback(err);
-        return callback(null, new Rating(record));
+    // Check if there is an existing rating from this user
+    Ratings.search({
+      filter: {
+        "_buildfire.index.array1": rating.user._id,
+        "_buildfire.index.string1": rating.ratingId
       }
-    );
+    }, (err, ratings) => {
+      if (err) return callback(err);
+      if (ratings && ratings.length) return callback(new Error("User already rated item"))
+      if (!ratings || ratings.length === 0) {
+        rating.createdOn = new Date();
+
+        buildfire.appData.insert(
+          rating.toJSON(),
+          Ratings.TAG,
+          false,
+          (err, record) => {
+            if (err) return callback(err);
+            return callback(null, new Rating(record));
+          }
+        );
+      }
+    });
+
   }
   /**
    * Edit single rating instance

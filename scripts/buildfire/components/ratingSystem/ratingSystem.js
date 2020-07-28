@@ -10,8 +10,7 @@ class Stars {
    * @param {String} ratingId Unique id of item that is being rated - usually from database
    * @param {Object} options Options object, empty now
    */
-  constructor(containerSelector, ratingId, options) {
-    this.containerSelector = containerSelector;
+  constructor(ratingId, options) {
     this.ratingId = ratingId;
     this.options = options;
   }
@@ -39,7 +38,7 @@ class Stars {
     } else {
       Summaries.search(filters, (err, summaries) => {
         if (err) return console.error(err);
-        if (!summaries || !summaries[0]) {
+        if (!summaries || !summaries[0] || summaries[0].count === 0) {
           return container.innerHTML = "This item has not been rated yet"
         }
         let stars = document.createElement("div");
@@ -106,7 +105,8 @@ class Stars {
 
     Ratings.search({
       filter: {
-        "_buildfire.index.string1": this.ratingId
+        "_buildfire.index.string1": this.ratingId,
+        "_buildfire.index.number1": 1
       }
     }, (err, ratings) => {
       if (err) return callback(err);
@@ -148,7 +148,17 @@ class Stars {
   }
 
   addControlsToRating(ratingElement) {
-    let rating = new Rating(JSON.parse(ratingElement.dataset.rating))
+    let rating = JSON.parse(ratingElement.dataset.rating);
+    rating = new Rating({ data: rating, id: rating.id })
+
+    if (!rating.isActive) {
+      let inActiveRating = document.createElement("div");
+      inActiveRating.innerText = "This rating has been blocked";
+      ratingElement.appendChild(inActiveRating)
+    }
+
+    let controls = document.createElement("div");
+
     let deleteButton = document.createElement("button");
     deleteButton.innerText = "Delete";
     deleteButton.className = "delete-button"
@@ -163,15 +173,43 @@ class Stars {
         function (e, data) {
           console.log(e, data);
           if (e && e !== 2 || (data && data.selectedButton.key === "yes")) {
-            Ratings.del(rating, (err, deleted) => {
-              let ratingElement = document.getElementById(ratingElement.id);
+            Ratings.del(rating, (err, data) => {
+              console.log(data.rating)
+              let ratingElement = document.getElementById(data.rating.id);
               ratingElement.parentElement.removeChild(ratingElement)
             })
           }
         }
       );
     })
-    ratingElement.appendChild(deleteButton)
+
+    let blockButton = document.createElement("button");
+    blockButton.innerText = "Block";
+    blockButton.className = "delete-button"
+    blockButton.addEventListener("click", () => {
+      buildfire.notifications.confirm(
+        {
+          title: "Are you sure you want to block this review?",
+          message: "User will not be able to submit another review for this item",
+          confirmButton: { text: "Yes", key: "yes", type: "danger" },
+          cancelButton: { text: "No", key: "no", type: "default" }
+        },
+        function (e, data) {
+          console.log(e, data);
+          if (e && e !== 2 || (data && data.selectedButton.key === "yes")) {
+            Ratings.softDel(rating, (err, data) => {
+              console.log(data.rating)
+              // let ratingElement = document.getElementById(data.rating.id);
+              // ratingElement.parentElement.removeChild(ratingElement)
+            })
+          }
+        }
+      );
+    })
+    controls.appendChild(deleteButton)
+    controls.appendChild(blockButton)
+
+    ratingElement.appendChild(controls)
   }
 
   createRatingUI(rating) {
@@ -228,7 +266,15 @@ class Stars {
 
     let ratingReviewText = document.createElement("div");
     ratingReviewText.className = "rating-review-text";
-    ratingReviewText.innerText = rating.comment;
+    ratingReviewText.innerText = rating.comment.length > 120 ? rating.comment.slice(0, 120) + "..." : rating.comment;
+    if (rating.comment.length > 120) {
+      let seeMore = document.createElement("a");
+      seeMore.innerText = "see more"
+      seeMore.addEventListener("click", () => {
+        ratingReviewText.innerText = rating.comment
+      })
+      ratingReviewText.append(seeMore)
+    }
     ratingReview.appendChild(ratingReviewText);
 
     let ratingImages = document.createElement("div");
@@ -280,12 +326,22 @@ class Stars {
 
   }
 
-  openAddRatingScreen(containerSelector, callback) {
+  openAddRatingScreen(callback) {
     buildfire.auth.getCurrentUser((err, loggedInUser) => {
       if (err || !loggedInUser) throw new Error("User not logged in")
 
       Ratings.findRatingByUser(this.ratingId, loggedInUser._id, (err, rating) => {
-        console.log({ err, rating })
+        buildfire.navigation.onBackButtonClick = () => {
+          this.closeAddRatingScreen();
+          buildfire.navigation.restoreBackButtonClick();
+        }
+        if (rating && !rating.isActive) {
+          let container = document.createElement("div");
+          container.className = "add-rating-screen";
+          container.style.padding = "10px";
+          container.innerText = "Your rating has been removed for violating community guildelines"
+          return document.body.appendChild(container);
+        }
         let originalRating;
         if (!rating) {
           rating = new Rating({
@@ -303,11 +359,6 @@ class Stars {
           originalRating = new Rating({
             data: rating
           })
-        }
-
-        buildfire.navigation.onBackButtonClick = () => {
-          this.closeAddRatingScreen();
-          buildfire.navigation.restoreBackButtonClick();
         }
 
         let container = document.createElement("div");
@@ -329,7 +380,7 @@ class Stars {
         let updateStarsUI = () => {
           for (let i = 0; i < 5; i++) {
             const star = document.getElementById("stars" + i);
-            star.innerText = i < rating.rating ? fullStar : emptyStar;
+            star.innerText = i < rating.rating ? this.fullStar : this.emptyStar;
           }
         }
 
@@ -342,7 +393,7 @@ class Stars {
             rating.rating = i + 1;
             updateStarsUI()
           });
-          star.innerHTML = emptyStar;
+          star.innerHTML = this.emptyStar;
           ratingStars.appendChild(star);
         }
 
@@ -647,7 +698,6 @@ class Summaries {
   }
 
   static updateRating(originalRating, newRating, callback) {
-    console.log({ originalRating, newRating })
     const filters = {
       filter: {
         "_buildfire.index.string1": newRating.ratingId
@@ -659,6 +709,31 @@ class Summaries {
 
       summary.total += newRating.rating;
       summary.total -= originalRating.rating;
+
+      buildfire.appData.update(
+        summary.id,
+        summary.toJSON(),
+        Summaries.TAG,
+        (err, record) => {
+          if (err) return callback(err);
+          return callback(null, new Summary(record));
+        }
+      );
+    })
+  }
+
+  static deleteRating(rating, callback) {
+    const filters = {
+      filter: {
+        "_buildfire.index.string1": rating.ratingId
+      }
+    }
+    buildfire.appData.search(filters, Summaries.TAG, (err, summaries) => {
+      if (err) return callback(err);
+      let summary = new Summary(summaries[0]);
+
+      summary.total -= rating.rating;
+      summary.count--;
 
       buildfire.appData.update(
         summary.id,
@@ -785,8 +860,29 @@ class Ratings {
     if (!(rating instanceof Rating))
       return callback(new Error("Only Rating instance can be used"));
 
-    rating.deletedBy = authManager.currentUser._id;
-    rating.deletedOn = new Date();
+    buildfire.appData.delete(
+      rating.id,
+      Ratings.TAG,
+      (err, record) => {
+        if (err) return callback(err);
+        Summaries.deleteRating(rating, (err, data) => {
+          return callback(null, { rating, summary: data });
+        })
+      }
+    );
+  }
+
+  /**
+   * Soft delete single rating instance
+   * @param {Rating} rating Instance of rating data class
+   * @param {Function} callback Callback function
+   */
+  static softDel(rating, callback) {
+    if (!(rating instanceof Rating))
+      return callback(new Error("Only Rating instance can be used"));
+
+    let shouldUpdateSummary = rating.isActive;
+
     rating.isActive = false;
 
     buildfire.appData.update(
@@ -795,7 +891,12 @@ class Ratings {
       Ratings.TAG,
       (err, record) => {
         if (err) return callback(err);
-        return callback(null, new Rating(record));
+        if (!shouldUpdateSummary) return callback(null, rating);
+
+        Summaries.deleteRating(rating, (err, data) => {
+          return callback(null, rating);
+        })
+
       }
     );
   }

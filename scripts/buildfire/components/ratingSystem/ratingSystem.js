@@ -541,8 +541,6 @@ class Stars {
   }
 }
 
-class Reviews { }
-
 class Rating {
   constructor(record = {}) {
     if (!record.data) record.data = {};

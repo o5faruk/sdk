@@ -12,8 +12,34 @@ var buildfire = {
     isFileServer: function(url){
         return (url.indexOf("s3.amazonaws.com") !== -1);
     }
-    , isWeb: function(){
-        return (window.location.protocol.indexOf("http") == 0);
+    , isWeb: function(callback){
+        var isWebFromContext = function (context) {
+            if (context && context.device && context.device.platform) {
+                return context.device.platform.toLowerCase() === "web";
+            } else {
+                console.error("context device platform not defined");
+                return (window.location.protocol.indexOf("http") === 0);
+            }
+        };
+        var context = buildfire.getContext(function(err, callbackContext){
+            if(callback){
+                if(err) {
+                    callback(err);
+                } else {
+                    callback(null, isWebFromContext(callbackContext));
+                }
+            }
+        });
+        if(context) {
+            return isWebFromContext(context);
+        } else {
+            if(!callback) {
+                console.warn("context not ready. must use isWeb with callback parameter: function(err, isWebResult)");
+                return (window.location.protocol.indexOf("http") === 0);
+            }
+            // don't return anything if context is not ready but we have a callback
+        }
+
     }
     , logger: {
         attachRemoteLogger:function (tag){
@@ -406,6 +432,12 @@ var buildfire = {
         , triggerOnPluginOpened: function (data) {
             return buildfire.eventManager.trigger('pluginOpened', data);
         }
+        , getBackNavigationInstanceId: function () {
+            var qs = buildfire.parseQueryString();
+            if (qs.backnavigationinstance)
+                return qs.backnavigationinstance;
+            return undefined;
+        }
     },
     //buildfire.getFrameType API returns string "launcherPluginv" if it is Home plugin
     // else it returns "controlIFrame"
@@ -566,7 +598,8 @@ var buildfire = {
                 buildfire._sendPacket(p, function (err, footerMenu) {
                     if (err) {
                         console.error(err);
-                    } else if (footerMenu && footerMenu.settings && !footerMenu.settings.turnOnFooterMenu) {
+                    }
+                    if ((!footerMenu || !footerMenu.settings) || !footerMenu.settings.turnOnFooterMenu) {
                         html.setAttribute('safe-area', 'true');
                     }
                 });
@@ -631,7 +664,7 @@ var buildfire = {
                     && appTheme.fontId !== 'Shadows+into+Light'&& appTheme.fontId !== 'Asap+condensed') {
                         css += '@import url(\'https://fonts.googleapis.com/css?family='+ appTheme.fontName +'\');'
                     }
-                    css +=  ':root {'
+                    css +=  ':root:root {'
                             + '  --mdc-typography-font-family: unquote("' + appTheme.fontName + ', sans-serif");'
                             + '  --mdc-theme-primary:' + appTheme.colors.primaryTheme +';'
                             + '  --mdc-theme-secondary:' + appTheme.colors.successTheme + ';'
@@ -1936,7 +1969,7 @@ var buildfire = {
             {
                 //var protocol = window.location.protocol == "https:" ? "https:" : "http:";
                 var protocol = "https:";
-                var root = protocol + "//czi3m2qn.cloudimg.io/";
+                var root = protocol + "//alnnibitpo.cloudimg.io/";
                 var compression = buildfire.imageLib.getCompression(options.compression);
                 var result = '';
 
@@ -2031,7 +2064,7 @@ var buildfire = {
 
             //var protocol = window.location.protocol == "https:" ? "https:" : "http:";
             var protocol = "https:";
-            var root = protocol + "//czi3m2qn.cloudimg.io/crop/";
+            var root = protocol + "//alnnibitpo.cloudimg.io/crop/";
 
             var size = Math.floor(options.width * ratio) + "x" + Math.floor(options.height * ratio) + "/";
             var compression = buildfire.imageLib.getCompression(options.compression);
@@ -2477,12 +2510,16 @@ var buildfire = {
                 return root;
             else
                 return root + "?dld=" + JSON.stringify(obj);
+        },
+        generateUrl: function (params, callback) {
+            var p = new Packet(null, 'shortLinks.generate', params);
+            buildfire._sendPacket(p, callback);
         }
     }
     /// ref: https://github.com/BuildFire/sdk/wiki/Spinners
     , spinner: {
-        show: function () {
-            buildfire._sendPacket(new Packet(null, 'spinner.show'));
+        show: function (options) {
+            buildfire._sendPacket(new Packet(null, 'spinner.show', options));
         }
         , hide: function () {
             buildfire._sendPacket(new Packet(null, 'spinner.hide'));
@@ -2574,6 +2611,10 @@ var buildfire = {
         },
         showTagsSearchDialog: function(options,callback){
             var p = new Packet(null, 'usersLib.showTagsSearchDialog', options);
+            buildfire._sendPacket(p, callback);
+        },
+        assignUserTags: function(tags, options, callback) {
+            var p = new Packet(null, 'userTags.assignUserTags', {tags: tags, options: options});
             buildfire._sendPacket(p, callback);
         }
     }

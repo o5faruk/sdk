@@ -104,12 +104,16 @@ var buildfire = {
             if (!div) {
                 div = document.createElement('div');
                 div.style.position = 'fixed';
+                div.style.padding = '10px';
                 div.style.left = div.style.top = 0;
                 div.style.width = '100%';
-                div.style.backgroundColor = 'black';
+                div.style.backgroundColor = 'white';
                 div.style.opacity = 0.9;
                 div.style.display = 'none';
                 div.style.zIndex = 9999;
+                div.style.maxHeight = "100vh";
+                div.style.height = "100vh";
+                div.style.overflow = "scroll";
                 buildfire.logger._logContainerDIV = div;
 
 
@@ -135,7 +139,7 @@ var buildfire = {
                 }
 
                 var select = document.createElement('select');
-                select.className = 'form-control';
+                select.style.marginBottom = "10px"
                 select.onchange = function () {
                     var value = select.options[select.selectedIndex].value;
                     if (value == 'close') {
@@ -152,6 +156,55 @@ var buildfire = {
                     option.value = toggleClass;
                     select.appendChild(option);
                 }
+
+                let closeButton = document.createElement("div");
+                closeButton.style.position = 'fixed';
+                closeButton.style.right = "-1px";
+                closeButton.style.top = "10px";
+                closeButton.style.backgroundColor = 'white';
+                closeButton.style.color = "black";
+                closeButton.style.zIndex = 9999;
+                closeButton.style.padding = "10px";
+                closeButton.style.border = "1px solid #ececec";
+                closeButton.style.borderTopLeftRadius = "20px";
+                closeButton.style.borderBottomLeftRadius = "20px";
+                closeButton.innerText = "Hide Logs";
+
+                closeButton.addEventListener("click", () => {
+                    buildfire.logger.hideHistory();
+                })
+
+
+                let sendToEmailButton = document.createElement("div");
+                sendToEmailButton.style.position = 'fixed';
+                sendToEmailButton.style.right = "-1px";
+                sendToEmailButton.style.top = "55px";
+                sendToEmailButton.style.backgroundColor = 'white';
+                sendToEmailButton.style.color = "black";
+                sendToEmailButton.style.zIndex = 9999;
+                sendToEmailButton.style.padding = "10px";
+                sendToEmailButton.style.border = "1px solid #ececec";
+                sendToEmailButton.style.borderTopLeftRadius = "20px";
+                sendToEmailButton.style.borderBottomLeftRadius = "20px";
+                sendToEmailButton.innerText = "Ship logs";
+
+                sendToEmailButton.addEventListener("click", () => {
+                    let logs = [];
+                    for (let i = 1; i < div.children.length; i++) {
+                        let log = div.children[i];
+                        if (log && log.tagName === "DIV") logs.push(log.innerText);
+                    }
+                    buildfire.actionItems.execute({
+                        title: "Logs",
+                        subject: "Logs",
+                        body: logs.join("%0D%0A"),
+                        action: "sendEmail"
+                    })
+                })
+
+                div.appendChild(closeButton);
+                div.appendChild(sendToEmailButton);
+
 
                 createFilterOption('Show all', '');
                 createFilterOption('Info logs only', 'bflog-info');
@@ -183,7 +236,7 @@ var buildfire = {
             var div = buildfire.logger._getLogContainerDIV();
             div.appendChild(element);
             if (div.childNodes.length > buildfire.logger.logMaxLength)
-                div.removeChild(div.childNodes[0]);
+                div.removeChild(div.childNodes[1]);
         }
         , init: function () {
             //buildfire.logger._suppress = window.location.href.indexOf('http') >=0;
@@ -196,7 +249,7 @@ var buildfire = {
             var l = console.log;
             console.log = function (message) {
                 var dv = document.createElement('div');
-                dv.innerHTML = "l: " + message;
+                dv.innerHTML = "log: " + message;
                 dv.className = 'bflog-log';
                 buildfire.logger.pushHistory(dv);
                 d.apply(console, arguments);
@@ -205,8 +258,8 @@ var buildfire = {
             var d = console.debug;
             console.debug = function (message) {
                 var dv = document.createElement('div');
-                dv.innerHTML = "d: " + message;
-                dv.className = 'bflog-debug bg-info';
+                dv.innerHTML = "debug: " + message;
+                dv.className = 'bflog-debug';
                 buildfire.logger.pushHistory(dv);
                 d.apply(console, arguments);
             };
@@ -214,8 +267,8 @@ var buildfire = {
             var e = console.error;
             console.error = function (message) {
                 var dv = document.createElement('div');
-                dv.innerHTML = "e: " + message;
-                dv.className = 'bflog-error bg-error';
+                dv.innerHTML = "error: " + message;
+                dv.className = 'bflog-error';
                 buildfire.logger.pushHistory(dv);
                 e.apply(console, arguments);
             };
@@ -223,8 +276,8 @@ var buildfire = {
             var w = console.warn;
             console.warn = function (message) {
                 var dv = document.createElement('div');
-                dv.innerHTML = "w: " + message;
-                dv.className = 'bflog-warn bg-warning';
+                dv.innerHTML = "warn: " + message;
+                dv.className = 'bflog-warn';
                 buildfire.logger.pushHistory(dv);
                 w.apply(console, arguments);
             };
@@ -232,8 +285,8 @@ var buildfire = {
             var i = console.info;
             console.info = function (message) {
                 var dv = document.createElement('div');
-                dv.innerHTML = "i: " + message;
-                dv.className = 'bflog-info bg-info';
+                dv.innerHTML = "info: " + message;
+                dv.className = 'bflog-info';
                 buildfire.logger.pushHistory(dv);
                 i.apply(console, arguments);
             };
@@ -265,12 +318,21 @@ var buildfire = {
         , createLoggerToggle: function () {
             let loggerToggle = document.createElement("div");
             loggerToggle.style.position = 'fixed';
-            loggerToggle.style.right = 0;
+            loggerToggle.style.right = "-1px";
             loggerToggle.style.top = "60vh";
             loggerToggle.style.backgroundColor = 'white';
             loggerToggle.style.color = "black";
             loggerToggle.style.zIndex = 9999;
+            loggerToggle.style.padding = "10px";
+            loggerToggle.style.border = "1px solid #ececec";
+            loggerToggle.style.borderTopLeftRadius = "20px";
+            loggerToggle.style.borderBottomLeftRadius = "20px";
             loggerToggle.innerText = "Show Logs";
+
+            loggerToggle.addEventListener("click", () => {
+                buildfire.logger.showHistory();
+            })
+
             document.body.appendChild(loggerToggle);
         }
     }
